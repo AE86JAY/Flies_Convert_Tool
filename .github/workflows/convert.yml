@@ -1,0 +1,108 @@
+name: 多功能文件格式转换器
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_files:
+        description: '原文件路径（支持通配符 *.*）'
+        required: true
+        default: '原文件/*.*'
+        type: string
+      
+      input_format:
+        description: '输入文件格式'
+        required: true
+        default: '.doc'
+        type: choice
+        options:
+          - .doc
+          - .docx
+          - .xls
+          - .xlsx
+          - .pdf
+          - .chm
+          - .epub
+      
+      output_format:
+        description: '输出文件格式'
+        required: true
+        default: '.pdf'
+        type: choice
+        options:
+          - .doc
+          - .docx
+          - .xls
+          - .xlsx
+          - .pdf
+          - .chm
+          - .epub
+      
+      page_option:
+        description: '页面选项'
+        required: true
+        default: '缩放'
+        type: choice
+        options:
+          - 缩放
+          - 横向
+          - 竖向
+      
+      split_files:
+        description: '是否分割文件'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  convert-files:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+    
+    - name: 安装必要工具
+      run: |
+        chmod +x scripts/setup.sh
+        ./scripts/setup.sh
+    
+    - name: 创建输出目录
+      run: mkdir -p "转换后"
+    
+    - name: 应用补丁
+      run: |
+        chmod +x scripts/apply_patches.sh
+        ./scripts/apply_patches.sh
+    
+    - name: 转换文件
+      run: |
+        chmod +x scripts/convert_docs.sh
+        chmod +x scripts/convert_ebooks.sh
+        export INPUT_FORMAT="${{ github.event.inputs.input_format }}"
+        export OUTPUT_FORMAT="${{ github.event.inputs.output_format }}"
+        export PAGE_OPTION="${{ github.event.inputs.page_option }}"
+        export SOURCE_FILES="${{ github.event.inputs.source_files }}"
+        
+        # 根据文件类型选择转换脚本
+        if [[ "$INPUT_FORMAT" =~ \.(doc|docx|xls|xlsx|pdf)$ ]] && [[ "$OUTPUT_FORMAT" =~ \.(doc|docx|xls|xlsx|pdf)$ ]]; then
+          ./scripts/convert_docs.sh
+        elif [[ "$INPUT_FORMAT" =~ \.(chm|epub)$ ]] || [[ "$OUTPUT_FORMAT" =~ \.(chm|epub)$ ]]; then
+          ./scripts/convert_ebooks.sh
+        else
+          echo "混合类型转换"
+          ./scripts/convert_docs.sh
+          ./scripts/convert_ebooks.sh
+        fi
+    
+    - name: 分割文件（如果需要）
+      if: ${{ github.event.inputs.split_files == 'true' }}
+      run: |
+        chmod +x scripts/split_files.sh
+        ./scripts/split_files.sh
+    
+    - name: 上传转换后的文件
+      uses: actions/upload-artifact@v4
+      with:
+        name: converted-files
+        path: 转换后/
+        retention-days: 7
